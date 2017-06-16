@@ -115,8 +115,10 @@ namespace AssemblyPlaceholder
 
         static void CloneAssembly(FileInfo filePath)
         {
-            var realAssembly = AssemblyDefinition.ReadAssembly(filePath.FullName);
+            var realAssembly = AssemblyDefinition.ReadAssembly(filePath.FullName, new ReaderParameters() { ReadingMode = ReadingMode.Immediate, AssemblyResolver = resolver });
             var clonedAssembly = AssemblyDefinition.CreateAssembly(realAssembly.Name, realAssembly.MainModule.Name, realAssembly.MainModule.Kind);
+
+            //var UnityAssembly = AssemblyDefinition.ReadAssembly(@"C:\Users\Bradley\Dropbox\Coding\Github\AssemblyPlacholder\AssemblyPlaceholder\bin\Debug\Test\UnityEngine.dll");
 
             clonedAssembly.MainModule.Mvid = realAssembly.MainModule.Mvid;
             clonedAssembly.MainModule.Characteristics = realAssembly.MainModule.Characteristics;
@@ -160,12 +162,21 @@ namespace AssemblyPlaceholder
 
             clonedAssembly.Write(dummyAssemblyFile, new WriterParameters { WriteSymbols = false });
         }
-
+        private static DefaultAssemblyResolver resolver;
         static void Main(string[] args)
         {
-            var directory = new DirectoryInfo(args[0]);
+            string path = @"D:\Shared\Users\Brad\Dropbox\Coding\Github\AssemblyPlacholder\AssemblyPlaceholder\bin\Debug\Test";
+            //string path = @"C:\Users\Bradley\Dropbox\Coding\Github\AssemblyPlacholder\AssemblyPlaceholder\bin\Debug\Test";
+            if (args.Length > 0)
+            {
+                path = args[0];
+            }
+            var directory = new DirectoryInfo(path);
 
             var dummyDirectory = Path.Combine(directory.FullName, "Dummies");
+
+            resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory(path);
 
             if (!Directory.Exists(dummyDirectory))
             {
@@ -255,14 +266,16 @@ namespace AssemblyPlaceholder
                 CloneCustomAttributes(realEvent, clonedEvent, intoModule);
             }
 
-            foreach (var realProperty in realType.Properties.Where(i => (i.GetMethod != null && i.GetMethod.IsPublic) || (i.SetMethod != null && i.SetMethod.IsPublic)))
+            foreach (var realProperty in realType.Properties.Where(i => 
+                (i.GetMethod != null && (i.GetMethod.IsPublic || i.GetMethod.IsFamily)) || 
+                (i.SetMethod != null && (i.SetMethod.IsPublic || i.SetMethod.IsFamily))))
             {
                 var clonedProperty = new PropertyDefinition(realProperty.Name, realProperty.Attributes, CloneTypeReference(realProperty.PropertyType, intoModule, clonedType))
                 {
                     HasThis = realProperty.HasThis
                 };
 
-                if (realProperty.GetMethod != null && realProperty.GetMethod.IsPublic)
+                if (realProperty.GetMethod != null && (realProperty.GetMethod.IsPublic || realProperty.GetMethod.IsFamily))
                 {
                     var clonedGetMethod = CloneMethod(realProperty.GetMethod, intoModule, clonedType, clonedType.Methods);
 
@@ -271,7 +284,7 @@ namespace AssemblyPlaceholder
                     eventAndPropertyMethods.Add(clonedGetMethod.FullName);
                 }
 
-                if (realProperty.SetMethod != null && realProperty.SetMethod.IsPublic)
+                if (realProperty.SetMethod != null && (realProperty.SetMethod.IsPublic || realProperty.SetMethod.IsFamily))
                 {
                     var clonedSetMethod = CloneMethod(realProperty.SetMethod, intoModule, clonedType, clonedType.Methods);
 
@@ -285,7 +298,7 @@ namespace AssemblyPlaceholder
                 CloneCustomAttributes(realProperty, clonedProperty, intoModule);
             }
 
-            foreach (var realMethod in realType.Methods.Where(i => i.IsPublic && !eventAndPropertyMethods.Contains(i.FullName)))
+            foreach (var realMethod in realType.Methods.Where(i => (i.IsPublic || i.IsFamily) && !eventAndPropertyMethods.Contains(i.FullName)))
             {
                 CloneMethod(realMethod, intoModule, clonedType, clonedType.Methods);
             }
